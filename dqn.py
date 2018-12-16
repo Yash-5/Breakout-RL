@@ -6,9 +6,10 @@ import random
 import sys
 import tensorflow as tf
 from datetime import datetime
-import tqdm
+from tqdm import tqdm
+import csv
 
-from collections import deque, namedtuple
+from collections import namedtuple
 
 class state_processor():
     def __init__(self, input_shape, scope_name="state_processor"):
@@ -92,9 +93,9 @@ def epsilon_greedy(qnet, num_actions):
         return pol
     return policy
 
-def train(train_episode, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in_size=10000,
+def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in_size=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          batch_size=32):
+          batch_size=32, hide_progress=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
@@ -104,7 +105,33 @@ def train(train_episode, save_dir, sess, env, qnet, target_net, s_processor, p_c
 
     loss_writer.writerow(['Iterations', 'Loss'])
     rewards_writer.writerow(['Iterations', 'Rewards'])
-    pass
+
+    epsilons = np.linspace(epsilon_start, epsilon_end, epsilon_decay_iter)
+
+    Transition = namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
+    replay_memory = []
+
+    state = env.reset()
+    state = s_processor.process(sess, state)
+    state = np.stack([state] * 4, axis=2)
+    for i in tqdm(range(burn_in_size), disable=hide_progress):
+        action = env.action_space.sample()
+        next_state, reward, done, _ = env.step(action)
+        next_state = s_processor.process(sess, next_state)
+        next_state = np.append(state[:, :, 1:], np.expand_dims(next_state, 2), axis=2)
+        replay_memory.append(Transition(state, action, reward, next_state, done))
+        if done:
+            state = env.reset()
+            state = s_processor.process(sess, state)
+            state = np.stack([state] * 4, axis=2)
+        else:
+            state = next_state
+
+    train_iter = 0
+    for train_ep in range(train_episodes):
+        state = env.reset()
+        state = s_processor.process(sess, state)
+        state = np.stack([state] * 4, axis=2)
 
 def main():
     env = gym.make("Breakout-v0")
@@ -116,6 +143,7 @@ def main():
     sess.run(tf.global_variables_initializer())
     start_time = str(datetime.now())
     print(start_time)
+    train(10, "./" + start_time, sess, env, qnet, target_net, sp, pc)
     
 if __name__ == '__main__':
     main()
