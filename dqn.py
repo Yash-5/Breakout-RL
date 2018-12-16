@@ -98,7 +98,12 @@ def train(train_episode, save_dir, sess, env, qnet, target_net, s_processor, p_c
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
+    loss_writer = csv.writer(loss_log, delimiter=',')
     rewards_log = open(os.path.join(save_dir, "rewards.csv"), 'w')
+    rewards_writer = csv.writer(rewards_log, delimiter=',')
+
+    loss_writer.writerow(['Iterations', 'Loss'])
+    rewards_writer.writerow(['Iterations', 'Rewards'])
     pass
 
 def main():
