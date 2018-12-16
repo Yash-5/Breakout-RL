@@ -81,6 +81,15 @@ class param_copier():
     def copy(self, sess):
         sess.run(self.copy_ops)
 
+def epsilon_greedy(qnet, num_actions):
+    def policy(sess, state, epsilon):
+        pol = np.ones(num_actions, dtype=float) * epsilon / num_actions
+        q_values = qnet.predict(sess, np.expand_dims(state, 0))[0]
+        greedy_action = np.argmax(q_values)
+        pol[greedy_action] += (1.0 - epsilon)
+        return pol
+    return policy
+
 def main():
     env = gym.make("Breakout-v0")
     qnet = QNet(input_shape=[210, 160, 1], scope_name="QNet", lr=1e-3)
