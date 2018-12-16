@@ -100,11 +100,14 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
         os.makedirs(save_dir)
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
     loss_writer = csv.writer(loss_log, delimiter=',')
-    rewards_log = open(os.path.join(save_dir, "rewards.csv"), 'w')
+    rewards_log = open(os.path.join(save_dir, "train_rewards.csv"), 'w')
     rewards_writer = csv.writer(rewards_log, delimiter=',')
+    eval_log = open(os.path.join(save_dir, "eval_rewards.csv", 'w'))
+    eval_writer = csv.writer(eval_log, delimiter=',')
 
     loss_writer.writerow(['Iterations', 'Loss'])
     rewards_writer.writerow(['Iterations', 'Rewards'])
+    eval_writer.writerow(['Episode', 'Average Reward'])
 
     epsilons = np.linspace(epsilon_start, epsilon_end, epsilon_decay_iter)
 
@@ -132,6 +135,10 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
         state = env.reset()
         state = s_processor.process(sess, state)
         state = np.stack([state] * 4, axis=2)
+        done = False
+        while not done:
+            epsilon = epsilons[min(train_iter, epsilon_decay_steps-1)]
+            pass
 
 def main():
     env = gym.make("Breakout-v0")
