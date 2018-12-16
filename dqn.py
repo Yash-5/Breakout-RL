@@ -57,6 +57,14 @@ class QNet():
         self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
         self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
 
+    def predict(self, sess, state):
+        return sess.run(self.preds, feed_dict={self.X: state})
+
+    def update(self, sess, state, actions, y):
+        loss, _ = sess.run([self.loss, self.update_op], feed_dict={self.X: state,
+                                                                   self.y: y,
+                                                                   self.actions: actions})
+
 def main():
     env = gym.make("Breakout-v0")
     a = QNet(input_shape=[210, 160, 1], scope_name="QNet", lr=1e-3)
