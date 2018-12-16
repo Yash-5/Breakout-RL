@@ -5,6 +5,8 @@ import os
 import random
 import sys
 import tensorflow as tf
+from datetime import datetime
+import tqdm
 
 from collections import deque, namedtuple
 
@@ -90,14 +92,25 @@ def epsilon_greedy(qnet, num_actions):
         return pol
     return policy
 
+def train(train_episode, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in_size=10000,
+          target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
+          batch_size=32):
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir)
+    loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
+    rewards_log = open(os.path.join(save_dir, "rewards.csv"), 'w')
+    pass
+
 def main():
     env = gym.make("Breakout-v0")
     qnet = QNet(input_shape=[210, 160, 1], scope_name="QNet", lr=1e-3)
     target_net = QNet(input_shape=[210, 160, 1], scope_name="Target", lr=1e-3)
+    sp = state_processor(input_shape=[210, 160, 3])
     pc = param_copier(qnet, target_net)
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
-    pc.copy(sess)
+    start_time = str(datetime.now())
+    print(start_time)
     
 if __name__ == '__main__':
     main()
