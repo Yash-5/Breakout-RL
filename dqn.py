@@ -64,11 +64,31 @@ class QNet():
         loss, _ = sess.run([self.loss, self.update_op], feed_dict={self.X: state,
                                                                    self.y: y,
                                                                    self.actions: actions})
+        return loss
+
+class param_copier():
+    def __init__(self, qnet, target_net):
+        qnet_params = [t for t in tf.trainable_variables() if t.name.startswith(qnet.scope_name)]
+        qnet_params = sorted(qnet_params, key=lambda v: v.name)
+        target_net_params = [t for t in tf.trainable_variables() if t.name.startswith(target_net.scope_name)]
+        target_net_params = sorted(target_net_params, key=lambda v: v.name)
+
+        self.copy_ops = []
+        for q_v, t_v in zip(qnet_params, target_net_params):
+            cp = t_v.assign(q_v)
+            self.copy_ops.append(cp)
+
+    def copy(self, sess):
+        sess.run(self.copy_ops)
 
 def main():
     env = gym.make("Breakout-v0")
-    a = QNet(input_shape=[210, 160, 1], scope_name="QNet", lr=1e-3)
-    s = np.random.randn(2, 210, 160, 1)
-
+    qnet = QNet(input_shape=[210, 160, 1], scope_name="QNet", lr=1e-3)
+    target_net = QNet(input_shape=[210, 160, 1], scope_name="Target", lr=1e-3)
+    pc = param_copier(qnet, target_net)
+    sess = tf.InteractiveSession()
+    sess.run(tf.global_variables_initializer())
+    pc.copy(sess)
+    
 if __name__ == '__main__':
     main()
