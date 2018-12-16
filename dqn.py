@@ -12,7 +12,7 @@ class state_processor():
     def __init__(self, input_size, scope_name="state_processor"):
         self.scope_name = scope_name
         with tf.variable_scope(self.scope_name):
-            self.input_state = tf.placeholder(shape=input_size, dtype=tf.uint8)
+            self.input_state = tf.placeholder(shape=input_size, dtype=tf.float32)
             self.output = tf.squeeze(tf.image.rgb_to_grayscale(self.input_state))
 
     def process(self, sess, input_state):
@@ -27,7 +27,7 @@ class QNet():
             self.build_model()
 
     def build_model(self):
-        self.X = tf.placeholder(shape=[None] + list(self.inpu_shape), dtype=tf.uint8, name="X")
+        self.X = tf.placeholder(shape=[None] + list(self.inpu_shape), dtype=tf.float32, name="X")
         self.y = tf.placeholder(shape=[None], dtype=tf.float32, name="y")
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
@@ -39,6 +39,8 @@ def main():
     state = a.process(sess, s)
     print(state.shape)
     print(s.shape)
+    print(s)
+    print(sess)
 
 if __name__ == '__main__':
     main()
