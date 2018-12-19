@@ -94,6 +94,12 @@ def epsilon_greedy(qnet, num_actions):
         return pol
     return policy
 
+def reset_env(env, s_processor, sess):
+    state = env.reset()
+    state = s_processor.process(sess, state)
+    state = np.stack([np.squeeze(state, axis=2)] * 4, axis=2)
+    return state
+
 def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
           batch_size=32, hide_progress=False):
@@ -117,9 +123,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     Transition = namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
     replay_memory = []
 
-    state = env.reset()
-    state = s_processor.process(sess, state)
-    state = np.stack([np.squeeze(state, axis=2)] * 4, axis=2)
+    state = reset_env(env, s_processor, sess)
     for i in tqdm(range(burn_in), disable=hide_progress):
         action = env.action_space.sample()
         next_state, reward, done, _ = env.step(action)
@@ -127,18 +131,14 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
         next_state = np.append(state[:, :, 1:], next_state, axis=2)
         replay_memory.append(Transition(state, action, reward, next_state, done))
         if done:
-            state = env.reset()
-            state = s_processor.process(sess, state)
-            state = np.stack([state] * 4, axis=2)
+            state = reset_env(env, s_processor, sess)
         else:
             state = next_state
 
     train_iter = 0
     for train_ep in tqdm(range(train_episodes), disable=hide_progress):
-        state = env.reset()
+        state = reset_env(env, s_processor, sess)
         episode_reward = 0
-        state = s_processor.process(sess, state)
-        state = np.stack([np.squeeze(state, axis=2)] * 4, axis=2)
         done = False
         while not done:
             epsilon = epsilons[min(train_iter, epsilon_decay_iter-1)]
@@ -155,7 +155,21 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             replay_memory.append(Transition(state, action, reward, next_state, done))
             if len(replay_memory) == replay_memory_size:
                 replay_memory.pop(0)
-            done = True
+
+            train_batch = random.sample(replay_memory, batch_size)
+            train_states, train_actions, train_rewards, train_next_states, train_done = map(np.array, zip(*train_batch))
+
+            q_values_next = target_net.predict(sess, train_next_states)
+            q_values_next = np.max(q_values_next, axis=1)
+            train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * q_values_next
+
+            loss = qnet.update(sess, train_states, train_actions, train_targets)
+
+            print(train_iter, loss)
+            loss_writer.writerow([train_iter, loss])
+            train_iter += 1
+
+            state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
 
 def main():
@@ -172,7 +186,7 @@ def main():
     sess.run(tf.global_variables_initializer())
     start_time = str(datetime.now())
     print(start_time)
-    train(10, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, burn_in=10, hide_progress=True)
+    train(10, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=5)
     
 if __name__ == '__main__':
     main()
