@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 
 class state_processor():
-    def __init__(self, input_shape, output_shape=[128, 128], scope_name="state_processor"):
+    def __init__(self, input_shape, output_shape=None, scope_name="state_processor"):
         self.scope_name = scope_name
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
@@ -27,14 +27,20 @@ class state_processor():
         return processed_state
 
 class QNet():
-    def __init__(self, scope_name, input_shape, lr, num_actions=4):
+    def __init__(self, scope_name, input_shape, lr, num_actions=4, trainable=True):
         self.scope_name = scope_name
         self.input_shape = input_shape
         self.num_actions = num_actions
         self.lr = lr
+        self.trainable = trainable
         self.history_size = input_shape[-1]
         with tf.variable_scope(scope_name):
             self.build_model()
+        if self.trainable:
+            with tf.variable_scope("optim" + scope_name):
+                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+                self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
+                self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
 
     def build_model(self):
         self.X = tf.placeholder(shape=[None] + list(self.input_shape), dtype=tf.float32, name="X")
@@ -46,13 +52,13 @@ class QNet():
         self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
         self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu)
         self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 64, 5, 1, activation_fn=tf.nn.relu)
+        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 5, 1, activation_fn=tf.nn.relu)
         self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
-        self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
-        self.pool4 = tf.contrib.layers.max_pool2d(self.conv4, 2, padding='SAME')
-        self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
+        #  self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
+        #  self.pool4 = tf.contrib.layers.max_pool2d(self.conv4, 2, padding='SAME')
+        #  self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
 
-        self.flattened = tf.contrib.layers.flatten(self.conv5)
+        self.flattened = tf.contrib.layers.flatten(self.pool3)
         self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
         self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions)
 
@@ -60,9 +66,6 @@ class QNet():
         self.action_preds = tf.gather_nd(self.preds, self.indices)
 
         self.loss = tf.reduce_mean(tf.squared_difference(self.y, self.action_preds))
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
-        self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
-        self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
 
     def predict(self, sess, state):
         return sess.run(self.preds, feed_dict={self.X: state})
@@ -75,9 +78,9 @@ class QNet():
 
 class param_copier():
     def __init__(self, qnet, target_net):
-        qnet_params = [t for t in tf.trainable_variables() if t.name.startswith(qnet.scope_name)]
+        qnet_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=qnet.scope_name)
         qnet_params = sorted(qnet_params, key=lambda v: v.name)
-        target_net_params = [t for t in tf.trainable_variables() if t.name.startswith(target_net.scope_name)]
+        target_net_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=target_net.scope_name)
         target_net_params = sorted(target_net_params, key=lambda v: v.name)
 
         self.copy_ops = []
@@ -137,6 +140,11 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     replay_memory = []
 
     state = reset_env(env, s_processor, sess)
+    #  print(state.shape)
+    #  a = sess.run([qnet.pool1, qnet.pool2, qnet.pool3], {qnet.X : np.expand_dims(state, 0)})
+    #  for x in a:
+        #  print(x.shape)
+    #  return
     for i in tqdm(range(burn_in), disable=hide_progress):
         action = env.action_space.sample()
         next_state, reward, done, _ = env.step(action)
@@ -187,19 +195,24 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
 def main():
     env = gym.make("Breakout-v0")
-    history_size = 4
-    input_shape = list(env.observation_space.shape)
-    input_shape[-1] = history_size
 
-    qnet = QNet(input_shape=[210, 160, 4], scope_name="QNet", lr=1e-3)
-    target_net = QNet(input_shape=[210, 160, 4], scope_name="Target", lr=1e-3)
-    sp = state_processor(input_shape=[210, 160, 3])
+    history_size = 4
+    observation_shape = list(env.observation_space.shape)
+    state_shape = [96, 96]
+    sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
+
+    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
+    target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", lr=1e-3, trainable=False)
+
     pc = param_copier(qnet, target_net)
+
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
+
     start_time = str(datetime.now())
     print(start_time)
-    train(1000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=100)
+
+    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=100, burn_in=100)
     
 if __name__ == '__main__':
     main()
