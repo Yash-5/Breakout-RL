@@ -120,7 +120,7 @@ def check_preprocessing(env, s_processor, sess):
 
 def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          batch_size=32, hide_progress=False):
+          batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
@@ -182,9 +182,16 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             train_batch = random.sample(replay_memory, batch_size)
             train_states, train_actions, train_rewards, train_next_states, train_done = map(np.array, zip(*train_batch))
 
-            q_values_next = target_net.predict(sess, train_next_states)
-            q_values_next = np.max(q_values_next, axis=1)
-            train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * q_values_next
+            if use_double:
+                q_values_next = qnet.predict(sess, train_next_states)
+                actions = np.argmax(q_values_next, axis=1)
+                target_values_next = target_net.predict(sess, train_next_states)
+                target_values_next = target_values_next[np.arange(batch_size), actions]
+            else:
+                target_values_next = target_net.predict(sess, train_next_states)
+                target_values_next = np.max(target_values_next, axis=1)
+
+            train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
 
             loss = qnet.update(sess, train_states, train_actions, train_targets)
 
