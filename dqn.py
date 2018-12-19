@@ -18,6 +18,7 @@ class state_processor():
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
             self.output = tf.image.rgb_to_grayscale(self.input_state)
+            self.output = tf.image.crop_to_bounding_box(self.output, 34, 0, 160, 160)
             if output_shape is not None:
                 self.output = tf.image.resize_images(self.output, output_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
             self.output /= 255.0
@@ -111,10 +112,11 @@ def check_preprocessing(env, s_processor, sess):
     state = s_processor.process(sess, state)
     plt.imshow(state[:, :, 0], cmap='gray')
     plt.show()
-    next_state, reward, done, _ = env.step(1)
-    next_state = s_processor.process(sess, next_state)
-    plt.imshow(next_state[:, :, 0], cmap='gray')
-    plt.show()
+    for action in range(1, env.action_space.n):
+        next_state, reward, done, _ = env.step(action)
+        next_state = s_processor.process(sess, next_state)
+        plt.imshow(next_state[:, :, 0], cmap='gray')
+        plt.show()
 
 def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
@@ -198,7 +200,7 @@ def main():
 
     history_size = 4
     observation_shape = list(env.observation_space.shape)
-    state_shape = [96, 96]
+    state_shape = [64, 64]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
     qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
