@@ -13,12 +13,13 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 
 class state_processor():
-    def __init__(self, input_shape, scope_name="state_processor"):
+    def __init__(self, input_shape, output_shape=[128, 128], scope_name="state_processor"):
         self.scope_name = scope_name
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
             self.output = tf.image.rgb_to_grayscale(self.input_state)
-            self.output = tf.image.resize_images(self.output, [128, 128], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+            if output_shape is not None:
+                self.output = tf.image.resize_images(self.output, output_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
             self.output /= 255.0
 
     def process(self, sess, input_state):
