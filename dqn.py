@@ -8,6 +8,7 @@ import tensorflow as tf
 from datetime import datetime
 from tqdm import tqdm
 import csv
+import matplotlib.pyplot as plt
 
 from collections import namedtuple
 
@@ -16,11 +17,13 @@ class state_processor():
         self.scope_name = scope_name
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
-            self.output = tf.squeeze(tf.image.rgb_to_grayscale(self.input_state))
+            self.output = tf.image.rgb_to_grayscale(self.input_state)
+            self.output = tf.image.resize_images(self.output, [128, 128], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+            self.output /= 255.0
 
     def process(self, sess, input_state):
         processed_state = sess.run(self.output, feed_dict={self.input_state: input_state})
-        return np.expand_dims(processed_state, 2)
+        return processed_state
 
 class QNet():
     def __init__(self, scope_name, input_shape, lr, num_actions=4):
@@ -38,7 +41,6 @@ class QNet():
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
         bs = tf.shape(self.X)[0]
-        X_normal = self.X / 255
         self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 5, 1, activation_fn=tf.nn.relu)
         self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
         self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu)
@@ -100,6 +102,16 @@ def reset_env(env, s_processor, sess):
     state = np.stack([np.squeeze(state, axis=2)] * 4, axis=2)
     return state
 
+def check_preprocessing(env, s_processor, sess):
+    state = env.reset()
+    state = s_processor.process(sess, state)
+    plt.imshow(state[:, :, 0], cmap='gray')
+    plt.show()
+    next_state, reward, done, _ = env.step(1)
+    next_state = s_processor.process(sess, next_state)
+    plt.imshow(next_state[:, :, 0], cmap='gray')
+    plt.show()
+
 def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
           batch_size=32, hide_progress=False):
@@ -124,10 +136,6 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     replay_memory = []
 
     state = reset_env(env, s_processor, sess)
-    #  print(state.shape)
-    #  a = sess.run([qnet.pool1, qnet.pool2, qnet.pool3, qnet.pool4, qnet.conv5], {qnet.X : np.expand_dims(state, 0)})
-    #  for x in a:
-        #  print(x.shape)
     for i in tqdm(range(burn_in), disable=hide_progress):
         action = env.action_space.sample()
         next_state, reward, done, _ = env.step(action)
@@ -169,12 +177,12 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
             loss = qnet.update(sess, train_states, train_actions, train_targets)
 
-            print(train_iter, loss)
             loss_writer.writerow([train_iter, loss])
             train_iter += 1
 
             state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
+        rewards_log.flush()
 
 def main():
     env = gym.make("Breakout-v0")
@@ -190,7 +198,7 @@ def main():
     sess.run(tf.global_variables_initializer())
     start_time = str(datetime.now())
     print(start_time)
-    train(10, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=5, burn_in=1000)
+    train(1000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=100)
     
 if __name__ == '__main__':
     main()
