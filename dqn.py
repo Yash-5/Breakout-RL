@@ -39,18 +39,18 @@ class QNet():
 
         bs = tf.shape(self.X)[0]
         X_normal = self.X / 255
-        self.conv1 = tf.contrib.layers.conv2d(self.X, 32, 5, 1, activation_fn=tf.nn.relu)
-        self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 2, padding='SAME')
+        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 5, 1, activation_fn=tf.nn.relu)
+        self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
         self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu)
         self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 128, 5, 1, activation_fn=tf.nn.relu)
+        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 64, 5, 1, activation_fn=tf.nn.relu)
         self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
-        self.conv4 = tf.contrib.layers.conv2d(self.pool3, 128, 5, 1, activation_fn=tf.nn.relu)
+        self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
         self.pool4 = tf.contrib.layers.max_pool2d(self.conv4, 2, padding='SAME')
         self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
 
         self.flattened = tf.contrib.layers.flatten(self.conv5)
-        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 512, activation_fn=tf.nn.relu)
+        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
         self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions)
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
@@ -124,6 +124,10 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     replay_memory = []
 
     state = reset_env(env, s_processor, sess)
+    #  print(state.shape)
+    #  a = sess.run([qnet.pool1, qnet.pool2, qnet.pool3, qnet.pool4, qnet.conv5], {qnet.X : np.expand_dims(state, 0)})
+    #  for x in a:
+        #  print(x.shape)
     for i in tqdm(range(burn_in), disable=hide_progress):
         action = env.action_space.sample()
         next_state, reward, done, _ = env.step(action)
@@ -186,7 +190,7 @@ def main():
     sess.run(tf.global_variables_initializer())
     start_time = str(datetime.now())
     print(start_time)
-    train(10, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=5)
+    train(10, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=5, burn_in=1000)
     
 if __name__ == '__main__':
     main()
