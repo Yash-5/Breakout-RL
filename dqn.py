@@ -67,7 +67,7 @@ class QNet():
 
         self.flattened = tf.contrib.layers.flatten(self.pool3)
         self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
-        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions)
+        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None)
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
         self.action_preds = tf.gather_nd(self.preds, self.indices)
