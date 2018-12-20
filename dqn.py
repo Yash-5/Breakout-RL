@@ -39,6 +39,9 @@ class QNet():
             self.build_model()
         if self.trainable:
             with tf.variable_scope("optim" + scope_name):
+
+                self.loss = tf.losses.huber_loss(self.y, self.action_preds)
+
                 self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
@@ -49,11 +52,14 @@ class QNet():
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
         bs = tf.shape(self.X)[0]
-        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 5, 1, activation_fn=tf.nn.relu)
+        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 5, 1, activation_fn=tf.nn.relu,
+                                              weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
-        self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu)
+        self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu,
+                                              weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 5, 1, activation_fn=tf.nn.relu)
+        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 5, 1, activation_fn=tf.nn.relu,
+                                              weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
         #  self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
         #  self.pool4 = tf.contrib.layers.max_pool2d(self.conv4, 2, padding='SAME')
@@ -65,8 +71,6 @@ class QNet():
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
         self.action_preds = tf.gather_nd(self.preds, self.indices)
-
-        self.loss = tf.reduce_mean(tf.squared_difference(self.y, self.action_preds))
 
     def predict(self, sess, state):
         return sess.run(self.preds, feed_dict={self.X: state})
