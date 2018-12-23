@@ -122,9 +122,26 @@ def check_preprocessing(env, s_processor, sess):
         plt.imshow(next_state[:, :, 0], cmap='gray')
         plt.show()
 
+def evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=0.05):
+    eps_policy = epsilon_greedy(qnet, qnet.num_actions)
+    rewards = []
+    for ep in range(eval_episodes):
+        state = reset_env(env, s_processor, sess)
+        episode_reward = 0
+        done = False
+        while not done:
+            action_probs = eps_policy(sess, state, epsilon)
+            action = np.random.choice(np.arange(qnet.num_actions), p=action_probs)
+            next_state, reward, done, _ = env.step(action)
+            next_state = s_processor.process(sess, next_state)
+            next_state = np.append(state[:, :, 1:], next_state, axis=2)
+            episode_reward += reward
+        rewards.append(episode_reward)
+    return rewards
+
 def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          batch_size=32, hide_progress=False, use_double=False):
+          eval_every=20, eval_episodes=10, batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
@@ -164,6 +181,11 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
     train_iter = 0
     for train_ep in tqdm(range(train_episodes), disable=hide_progress):
+        if train_ep % eval_every == 0:
+            eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
+            eval_mean = np.mean(eval_rewards)
+            eval_std = np.std(eval_rewards)
+            print(eval_mean, eval_std, "eval")
         state = reset_env(env, s_processor, sess)
         episode_reward = 0
         done = False
