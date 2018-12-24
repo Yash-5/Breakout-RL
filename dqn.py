@@ -52,13 +52,13 @@ class QNet():
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
         bs = tf.shape(self.X)[0]
-        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 5, 1, activation_fn=tf.nn.relu,
+        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 7, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
         self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 5, 1, activation_fn=tf.nn.relu,
+        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
         #  self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
@@ -66,7 +66,7 @@ class QNet():
         #  self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
 
         self.flattened = tf.contrib.layers.flatten(self.pool3)
-        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
+        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 256, activation_fn=tf.nn.relu)
         self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None)
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
@@ -153,7 +153,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
     loss_writer.writerow(['Iterations', 'Loss'])
     rewards_writer.writerow(['Episode', 'Reward'])
-    eval_writer.writerow(['Episode', 'Average Reward'])
+    eval_writer.writerow(['Episode', 'Average Reward', 'Std. Reward'])
 
     eps_policy = epsilon_greedy(qnet, qnet.num_actions)
 
@@ -185,6 +185,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
+            eval_writer.writerow([train_ep, eval_mean, eval_std])
             print(eval_mean, eval_std, "eval")
         state = reset_env(env, s_processor, sess)
         episode_reward = 0
@@ -227,13 +228,18 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
         rewards_log.flush()
+    eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
+    eval_mean = np.mean(eval_rewards)
+    eval_std = np.std(eval_rewards)
+    eval_writer.writerow([train_ep, eval_mean, eval_std])
+    print(eval_mean, eval_std, "eval")
 
 def main():
     env = gym.make("Breakout-v0")
 
     history_size = 4
     observation_shape = list(env.observation_space.shape)
-    state_shape = [64, 64]
+    state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
     qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
@@ -247,7 +253,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=100, burn_in=100)
+    train(100, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=100, burn_in=10000, eval_every=10, use_double=True)
     
 if __name__ == '__main__':
     main()
