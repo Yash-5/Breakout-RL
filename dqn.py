@@ -186,6 +186,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
             eval_writer.writerow([train_ep, eval_mean, eval_std])
+            eval_log.flush()
         state = reset_env(env, s_processor, sess)
         episode_reward = 0
         done = False
@@ -226,11 +227,11 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
             state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
-        rewards_log.flush()
     eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
     eval_mean = np.mean(eval_rewards)
     eval_std = np.std(eval_rewards)
     eval_writer.writerow([train_ep, eval_mean, eval_std])
+    eval_log.flush()
     print(eval_mean, eval_std, "eval")
 
 def main():
