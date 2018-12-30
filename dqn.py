@@ -233,7 +233,6 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     eval_std = np.std(eval_rewards)
     eval_writer.writerow([train_ep, eval_mean, eval_std])
     eval_log.flush()
-    print(eval_mean, eval_std, "eval")
 
 def main():
     env = gym.make("Breakout-v0")
@@ -254,7 +253,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(10000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=1000, burn_in=10000, eval_every=20, use_double=True)
+    train(10000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, eval_every=20, use_double=True)
     
 if __name__ == '__main__':
     main()
