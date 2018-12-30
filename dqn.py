@@ -28,12 +28,13 @@ class state_processor():
         return processed_state
 
 class QNet():
-    def __init__(self, scope_name, input_shape, lr, num_actions=4, trainable=True):
+    def __init__(self, scope_name, input_shape, lr=1e-3, num_actions=4, trainable=True):
         self.scope_name = scope_name
         self.input_shape = input_shape
         self.num_actions = num_actions
-        self.lr = lr
         self.trainable = trainable
+        if self.trainable:
+            self.lr = lr
         self.history_size = input_shape[-1]
         with tf.variable_scope(scope_name):
             self.build_model()
@@ -243,7 +244,7 @@ def main():
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
     qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
-    target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", lr=1e-3, trainable=False)
+    target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", trainable=False)
 
     pc = param_copier(qnet, target_net)
 
