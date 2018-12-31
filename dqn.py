@@ -151,6 +151,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             attr = getattr(qnet, v)
             param_file.write(str(attr) + "\n")
         param_file.write("input shape " + str(qnet.input_shape[0]) + " " + str(qnet.input_shape[1]) + "\n")
+        param_file.write("Learning rate " + str(qnet.lr) + "\n")
         param_file.write("memory size " + str(replay_memory_size) + "\n")
         param_file.write("burn in " + str(burn_in) + "\n")
         param_file.write("target update " + str(target_update_iter) + "\n")
@@ -269,7 +270,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(10000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, eval_every=20, use_double=True)
+    train(1000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, eval_every=20, use_double=True)
     
 if __name__ == '__main__':
     main()
