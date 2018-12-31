@@ -67,7 +67,7 @@ class QNet():
         #  self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
 
         self.flattened = tf.contrib.layers.flatten(self.pool3)
-        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 256, activation_fn=tf.nn.relu)
+        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
         self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None)
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
@@ -145,6 +145,22 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
           eval_every=20, eval_episodes=10, batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
+    with open(os.path.join(save_dir, "params"), 'w') as param_file:
+        layers = [x for x in dir(qnet) if x.startswith("conv") or x.startswith("fc") or x.startswith("preds")]
+        for v in layers:
+            attr = getattr(qnet, v)
+            param_file.write(str(attr) + "\n")
+        param_file.write("input shape " + str(qnet.input_shape[0]) + " " + str(qnet.input_shape[1]) + "\n")
+        param_file.write("memory size " + str(replay_memory_size) + "\n")
+        param_file.write("burn in " + str(burn_in) + "\n")
+        param_file.write("target update " + str(target_update_iter) + "\n")
+        param_file.write("gamma " + str(gamma) + "\n")
+        param_file.write("epsilon start " + str(epsilon_start) + "\n")
+        param_file.write("epsilon end " + str(epsilon_end) + "\n")
+        param_file.write("epsilon decay " + str(epsilon_decay_iter) + "\n")
+        param_file.write("eval every " + str(eval_every) + "\n")
+        param_file.write("eval episodes " + str(eval_episodes) + "\n")
+        param_file.write("Double? " + str(use_double) + "\n")
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
     loss_writer = csv.writer(loss_log, delimiter=',')
     rewards_log = open(os.path.join(save_dir, "train_rewards.csv"), 'w')
@@ -239,7 +255,7 @@ def main():
 
     history_size = 4
     observation_shape = list(env.observation_space.shape)
-    state_shape = [84, 84]
+    state_shape = [64, 64]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
     qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
