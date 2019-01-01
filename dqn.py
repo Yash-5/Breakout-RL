@@ -21,7 +21,7 @@ class state_processor():
             self.output = tf.image.crop_to_bounding_box(self.output, 34, 0, 160, 160)
             if output_shape is not None:
                 self.output = tf.image.resize_images(self.output, output_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-            self.output /= 255.0
+            self.output = tf.dtypes.cast(self.output, tf.uint8)
 
     def process(self, sess, input_state):
         processed_state = sess.run(self.output, feed_dict={self.input_state: input_state})
@@ -52,6 +52,8 @@ class QNet():
         self.y = tf.placeholder(shape=[None], dtype=tf.float32, name="y")
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
+        self.X = tf.divide(self.X, 255.0)
+
         bs = tf.shape(self.X)[0]
         self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 7, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
@@ -68,7 +70,7 @@ class QNet():
 
         self.flattened = tf.contrib.layers.flatten(self.pool3)
         self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
-        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None)
+        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_action, activation_fn=None)
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
         self.action_preds = tf.gather_nd(self.preds, self.indices)
@@ -171,7 +173,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
     loss_writer.writerow(['Iterations', 'Loss'])
     rewards_writer.writerow(['Episode', 'Reward'])
-    eval_writer.writerow(['Episode', 'Average Reward', 'Std. Reward'])
+    eval_writer.writerow(['Episode', 'Average Reward', 'Std. Reward', 'Min Reward', 'Max Reward'])
 
     eps_policy = epsilon_greedy(qnet, qnet.num_actions)
 
@@ -203,7 +205,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
-            eval_writer.writerow([train_ep, eval_mean, eval_std])
+            eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
             eval_log.flush()
         state = reset_env(env, s_processor, sess)
         episode_reward = 0
@@ -245,10 +247,11 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
 
             state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
+        rewards_log.flush()
     eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
     eval_mean = np.mean(eval_rewards)
     eval_std = np.std(eval_rewards)
-    eval_writer.writerow([train_ep, eval_mean, eval_std])
+    eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
     eval_log.flush()
 
 def main():
@@ -270,7 +273,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(1000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, eval_every=20, use_double=True)
+    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=500000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1)
     
 if __name__ == '__main__':
     main()
