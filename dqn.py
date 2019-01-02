@@ -86,17 +86,26 @@ class QNet():
 class param_copier():
     def __init__(self, qnet, target_net):
         qnet_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=qnet.scope_name)
-        qnet_params = sorted(qnet_params, key=lambda v: v.name)
+        self.qnet_params = sorted(qnet_params, key=lambda v: v.name)
         target_net_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=target_net.scope_name)
-        target_net_params = sorted(target_net_params, key=lambda v: v.name)
+        self.target_net_params = sorted(target_net_params, key=lambda v: v.name)
 
         self.copy_ops = []
         for q_v, t_v in zip(qnet_params, target_net_params):
             cp = t_v.assign(q_v)
             self.copy_ops.append(cp)
 
+        self.check_ops = []
+        for q_v, t_v in zip(qnet_params, target_net_params):
+            ch = tf.math.reduce_max(tf.math.abs(q_v - t_v))
+            self.check_ops.append(ch)
+
     def copy(self, sess):
         sess.run(self.copy_ops)
+
+    def check(self, sess, epsilon=1e-6):
+        diff = sess.run(self.check_ops)
+        return max(diff) < epsilon
 
 def epsilon_greedy(qnet, num_actions=4):
     def policy(sess, state, epsilon):
@@ -272,7 +281,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=500000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1)
+    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=1, burn_in=100, replay_memory_size=500000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1, eval_episodes=1)
     
 if __name__ == '__main__':
     main()
