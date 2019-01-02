@@ -52,21 +52,21 @@ class QNet():
         self.y = tf.placeholder(shape=[None], dtype=tf.float32, name="y")
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
-        self.X = tf.divide(self.X, 255.0)
+        self.X_rescaled = tf.divide(self.X, 255.0)
 
         bs = tf.shape(self.X)[0]
-        self.conv1 = tf.contrib.layers.conv2d(self.X, 64, 7, 1, activation_fn=tf.nn.relu,
+        self.conv1 = tf.contrib.layers.conv2d(self.X_rescaled, 64, 7, 4, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
-        self.conv2 = tf.contrib.layers.conv2d(self.pool1, 64, 5, 1, activation_fn=tf.nn.relu,
+        #  self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
+        self.conv2 = tf.contrib.layers.conv2d(self.conv1, 64, 5, 2, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 3, 1, activation_fn=tf.nn.relu,
+        #  self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
+        self.conv3 = tf.contrib.layers.conv2d(self.conv2, 32, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
+        #  self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
 
-        self.flattened = tf.contrib.layers.flatten(self.pool3)
-        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu,
+        self.flattened = tf.contrib.layers.flatten(self.conv3)
+        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 512, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
@@ -210,7 +210,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     train_iter = 0
     for train_ep in tqdm(range(train_episodes), disable=hide_progress):
         if train_ep % eval_every == 0:
-            eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
+            eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
             eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
@@ -256,7 +256,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             state = next_state
         rewards_writer.writerow([train_ep, episode_reward])
         rewards_log.flush()
-    eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor)
+    eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
     eval_mean = np.mean(eval_rewards)
     eval_std = np.std(eval_rewards)
     eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
@@ -281,7 +281,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=1, burn_in=100, replay_memory_size=500000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1, eval_episodes=1)
+    train(10000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=50000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=500000)
     
 if __name__ == '__main__':
     main()
