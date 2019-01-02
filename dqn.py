@@ -64,13 +64,12 @@ class QNet():
         self.conv3 = tf.contrib.layers.conv2d(self.pool2, 32, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
-        #  self.conv4 = tf.contrib.layers.conv2d(self.pool3, 64, 5, 1, activation_fn=tf.nn.relu)
-        #  self.pool4 = tf.contrib.layers.max_pool2d(self.conv4, 2, padding='SAME')
-        #  self.conv5 = tf.contrib.layers.conv2d(self.pool4, 32, 5, 1, activation_fn=tf.nn.relu)
 
         self.flattened = tf.contrib.layers.flatten(self.pool3)
-        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu)
-        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_action, activation_fn=None)
+        self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 128, activation_fn=tf.nn.relu,
+                                              weights_initializer=tf.contrib.layers.variance_scaling_initializer())
+        self.preds = tf.contrib.layers.fully_connected(self.fc1, self.num_actions, activation_fn=None,
+                                              weights_initializer=tf.contrib.layers.variance_scaling_initializer())
 
         self.indices = tf.stack([tf.range(bs), self.actions], axis=1)
         self.action_preds = tf.gather_nd(self.preds, self.indices)
