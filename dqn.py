@@ -98,7 +98,7 @@ class param_copier():
     def copy(self, sess):
         sess.run(self.copy_ops)
 
-def epsilon_greedy(qnet, num_actions):
+def epsilon_greedy(qnet, num_actions=4):
     def policy(sess, state, epsilon):
         pol = np.ones(num_actions, dtype=float) * epsilon / num_actions
         q_values = qnet.predict(sess, np.expand_dims(state, 0))[0]
