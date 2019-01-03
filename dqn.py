@@ -131,7 +131,8 @@ def check_preprocessing(env, s_processor, sess):
         plt.imshow(next_state[:, :, 0], cmap='gray')
         plt.show()
 
-def evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=0.05):
+def evaluate(eval_episodes, sess, env_name, qnet, s_processor, epsilon=0.05):
+    env = gym.make(env_name)
     rewards = []
     for ep in range(eval_episodes):
         state = reset_env(env, s_processor, sess)
@@ -146,9 +147,9 @@ def evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=0.05):
         rewards.append(episode_reward)
     return rewards
 
-def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
+def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          eval_every=20, eval_episodes=10, batch_size=32, hide_progress=False, use_double=False):
+          eval_every=100, eval_episodes=10, batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     with open(os.path.join(save_dir, "params"), 'w') as param_file:
@@ -157,7 +158,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             attr = getattr(qnet, v)
             param_file.write(str(attr) + "\n")
         param_file.write("input shape " + str(qnet.input_shape[0]) + " " + str(qnet.input_shape[1]) + "\n")
-        param_file.write("Learning rate " + str(qnet.lr) + "\n")
+        param_file.write("learning rate " + str(qnet.lr) + "\n")
         param_file.write("memory size " + str(replay_memory_size) + "\n")
         param_file.write("burn in " + str(burn_in) + "\n")
         param_file.write("target update " + str(target_update_iter) + "\n")
@@ -167,16 +168,16 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
         param_file.write("epsilon decay " + str(epsilon_decay_iter) + "\n")
         param_file.write("eval every " + str(eval_every) + "\n")
         param_file.write("eval episodes " + str(eval_episodes) + "\n")
-        param_file.write("Double? " + str(use_double) + "\n")
+        param_file.write("ddqn? " + str(use_double) + "\n")
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
     loss_writer = csv.writer(loss_log, delimiter=',')
-    rewards_log = open(os.path.join(save_dir, "train_rewards.csv"), 'w')
-    rewards_writer = csv.writer(rewards_log, delimiter=',')
+    train_log = open(os.path.join(save_dir, "train_log.csv"), 'w')
+    train_writer = csv.writer(train_log, delimiter=',')
     eval_log = open(os.path.join(save_dir, "eval_rewards.csv"), 'w')
     eval_writer = csv.writer(eval_log, delimiter=',')
 
     loss_writer.writerow(['Iterations', 'Loss'])
-    rewards_writer.writerow(['Episode', 'Reward'])
+    train_writer.writerow(['Episode', 'Reward', 'Length'])
     eval_writer.writerow(['Episode', 'Average Reward', 'Std. Reward', 'Min Reward', 'Max Reward'])
 
     epsilons = np.linspace(epsilon_start, epsilon_end, epsilon_decay_iter)
@@ -201,63 +202,73 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
         else:
             state = next_state
 
-    train_iter = 0
-    for train_ep in tqdm(range(train_episodes), disable=hide_progress):
-        if train_ep % eval_every == 0:
-            eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
+    state = reset_env(env, s_processor, sess)
+    episode_reward = 0
+    episode_length = 0
+    train_episode = 0
+    for train_iter in tqdm(range(train_iters), disable=hide_progress):
+        if train_iter % eval_every == 0:
+            eval_rewards = evaluate(eval_episodes, sess, env.unwrapped.spec.id, qnet, s_processor, epsilon=epsilon_end)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
-            eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
+            eval_writer.writerow([train_episode, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
             eval_log.flush()
-        state = reset_env(env, s_processor, sess)
-        episode_reward = 0
-        done = False
-        while not done:
-            epsilon = epsilons[min(train_iter, epsilon_decay_iter-1)]
-            if train_iter % target_update_iter == 0:
-                p_copier.copy(sess)
-            action = epsilon_greedy(qnet, sess, state, epsilon)
-            next_state, reward, done, _ = env.step(action)
-            next_state = s_processor.process(sess, next_state)
-            next_state = np.append(state[:, :, 1:], next_state, axis=2)
 
-            episode_reward += reward
+        if train_iter % target_update_iter == 0:
+            p_copier.copy(sess)
 
-            replay_memory.append(Transition(state, action, reward, next_state, done))
-            if len(replay_memory) == replay_memory_size:
-                replay_memory.pop(0)
+        epsilon = epsilons[min(train_iter, epsilon_decay_iter-1)]
+        action = epsilon_greedy(qnet, sess, state, epsilon)
+        next_state, reward, done, _ = env.step(action)
+        next_state = s_processor.process(sess, next_state)
+        next_state = np.append(state[:, :, 1:], next_state, axis=2)
 
-            train_batch = random.sample(replay_memory, batch_size)
-            train_states, train_actions, train_rewards, train_next_states, train_done = map(np.array, zip(*train_batch))
+        episode_reward += reward
+        episode_length += 1
 
-            if use_double:
-                q_values_next = qnet.predict(sess, train_next_states)
-                actions = np.argmax(q_values_next, axis=1)
-                target_values_next = target_net.predict(sess, train_next_states)
-                target_values_next = target_values_next[np.arange(batch_size), actions]
-            else:
-                target_values_next = target_net.predict(sess, train_next_states)
-                target_values_next = np.max(target_values_next, axis=1)
+        replay_memory.append(Transition(state, action, reward, next_state, done))
+        if len(replay_memory) == replay_memory_size:
+            replay_memory.pop(0)
 
-            train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
+        train_batch = random.sample(replay_memory, batch_size)
+        train_states, train_actions, train_rewards, train_next_states, train_done = map(np.array, zip(*train_batch))
 
-            loss = qnet.update(sess, train_states, train_actions, train_targets)
+        if use_double:
+            q_values_next = qnet.predict(sess, train_next_states)
+            actions = np.argmax(q_values_next, axis=1)
+            target_values_next = target_net.predict(sess, train_next_states)
+            target_values_next = target_values_next[np.arange(batch_size), actions]
+        else:
+            target_values_next = target_net.predict(sess, train_next_states)
+            target_values_next = np.max(target_values_next, axis=1)
 
-            loss_writer.writerow([train_iter, loss])
-            train_iter += 1
+        train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
 
+        loss = qnet.update(sess, train_states, train_actions, train_targets)
+
+        loss_writer.writerow([train_iter, loss])
+
+        if done:
+            train_writer.writerow([train_episode, episode_reward, episode_length])
+            train_log.flush()
+            state = reset_env(env, s_processor, sess)
+            episode_reward = 0
+            episode_length = 0
+            train_episode += 1
+        else:
             state = next_state
-        rewards_writer.writerow([train_ep, episode_reward])
-        rewards_log.flush()
-    eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
-    eval_mean = np.mean(eval_rewards)
-    eval_std = np.std(eval_rewards)
-    eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
-    eval_log.flush()
+
+
+
+    #  eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
+    #  eval_mean = np.mean(eval_rewards)
+    #  eval_std = np.std(eval_rewards)
+    #  eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
+    #  eval_log.flush()
 
 def main():
-    env = gym.make("Breakout-v0")
-
+    env_name = "Breakout-v0"
+    env = gym.make(env_name)
     history_size = 4
     observation_shape = list(env.observation_space.shape)
     state_shape = [84, 84]
@@ -274,7 +285,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=1000, replay_memory_size=50000, eval_every=50, eval_episodes=2, use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=500000)
+    train(int(5e7), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6))
     
 if __name__ == '__main__':
     main()
