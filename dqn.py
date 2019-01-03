@@ -28,11 +28,12 @@ class state_processor():
         return processed_state
 
 class QNet():
-    def __init__(self, scope_name, input_shape, lr=1e-3, num_actions=4, trainable=True):
+    def __init__(self, scope_name, input_shape, lr=1e-3, momentum=0.95, num_actions=4, trainable=True):
         self.scope_name = scope_name
         self.input_shape = input_shape
         self.num_actions = num_actions
         self.trainable = trainable
+        self.momentum = momentum
         if self.trainable:
             self.lr = lr
         self.history_size = input_shape[-1]
@@ -43,7 +44,7 @@ class QNet():
 
                 self.loss = tf.losses.huber_loss(self.y, self.action_preds)
 
-                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr, momentum=self.momentum)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
 
@@ -55,13 +56,11 @@ class QNet():
         self.X_rescaled = tf.divide(self.X, 255.0)
 
         bs = tf.shape(self.X)[0]
-        self.conv1 = tf.contrib.layers.conv2d(self.X_rescaled, 64, 7, 4, activation_fn=tf.nn.relu,
+        self.conv1 = tf.contrib.layers.conv2d(self.X_rescaled, 32, 8, 4, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        #  self.pool1 = tf.contrib.layers.max_pool2d(self.conv1, 4, stride=4, padding='SAME')
-        self.conv2 = tf.contrib.layers.conv2d(self.conv1, 64, 5, 2, activation_fn=tf.nn.relu,
+        self.conv2 = tf.contrib.layers.conv2d(self.conv1, 64, 4, 2, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        #  self.pool2 = tf.contrib.layers.max_pool2d(self.conv2, 2, padding='SAME')
-        self.conv3 = tf.contrib.layers.conv2d(self.conv2, 32, 3, 1, activation_fn=tf.nn.relu,
+        self.conv3 = tf.contrib.layers.conv2d(self.conv2, 64, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         #  self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
 
@@ -261,10 +260,10 @@ def main():
 
     history_size = 4
     observation_shape = list(env.observation_space.shape)
-    state_shape = [64, 64]
+    state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
-    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=1e-3)
+    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=2.5e-4)
     target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", trainable=False)
 
     pc = param_copier(qnet, target_net)
@@ -275,7 +274,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(10000, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=50000, eval_every=50, use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=500000)
+    train(1, "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=1000, replay_memory_size=50000, eval_every=50, eval_episodes=2, use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=500000)
     
 if __name__ == '__main__':
     main()
