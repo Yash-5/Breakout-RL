@@ -107,14 +107,13 @@ class param_copier():
         diff = sess.run(self.check_ops)
         return max(diff) < epsilon
 
-def epsilon_greedy(qnet, num_actions=4):
-    def policy(sess, state, epsilon):
-        pol = np.ones(num_actions, dtype=float) * epsilon / num_actions
+def epsilon_greedy(qnet, sess, state, epsilon, num_actions=4):
+    if random.random() < epsilon:
+        return random.randint(0, num_actions - 1)
+    else:
         q_values = qnet.predict(sess, np.expand_dims(state, 0))[0]
-        greedy_action = np.argmax(q_values)
-        pol[greedy_action] += (1.0 - epsilon)
-        return pol
-    return policy
+        return np.argmax(q_values)
+
 
 def reset_env(env, s_processor, sess):
     state = env.reset()
@@ -134,15 +133,13 @@ def check_preprocessing(env, s_processor, sess):
         plt.show()
 
 def evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=0.05):
-    eps_policy = epsilon_greedy(qnet, qnet.num_actions)
     rewards = []
     for ep in range(eval_episodes):
         state = reset_env(env, s_processor, sess)
         episode_reward = 0
         done = False
         while not done:
-            action_probs = eps_policy(sess, state, epsilon)
-            action = np.random.choice(np.arange(qnet.num_actions), p=action_probs)
+            action =  epsilon_greedy(qnet, sess, state, epsilon)
             next_state, reward, done, _ = env.step(action)
             next_state = s_processor.process(sess, next_state)
             next_state = np.append(state[:, :, 1:], next_state, axis=2)
@@ -183,8 +180,6 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
     rewards_writer.writerow(['Episode', 'Reward'])
     eval_writer.writerow(['Episode', 'Average Reward', 'Std. Reward', 'Min Reward', 'Max Reward'])
 
-    eps_policy = epsilon_greedy(qnet, qnet.num_actions)
-
     epsilons = np.linspace(epsilon_start, epsilon_end, epsilon_decay_iter)
 
     Transition = namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
@@ -222,8 +217,7 @@ def train(train_episodes, save_dir, sess, env, qnet, target_net, s_processor, p_
             epsilon = epsilons[min(train_iter, epsilon_decay_iter-1)]
             if train_iter % target_update_iter == 0:
                 p_copier.copy(sess)
-            action_probs = eps_policy(sess, state, epsilon)
-            action = np.random.choice(np.arange(qnet.num_actions), p=action_probs)
+            action = epsilon_greedy(qnet, sess, state, epsilon)
             next_state, reward, done, _ = env.step(action)
             next_state = s_processor.process(sess, next_state)
             next_state = np.append(state[:, :, 1:], next_state, axis=2)
