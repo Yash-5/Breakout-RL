@@ -85,6 +85,8 @@ class QNet():
 
 class param_copier():
     def __init__(self, qnet, target_net):
+        self.qnet = qnet
+        self.target_net = target_net
         qnet_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=qnet.scope_name)
         self.qnet_params = sorted(qnet_params, key=lambda v: v.name)
         target_net_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=target_net.scope_name)
@@ -102,7 +104,7 @@ class param_copier():
 
     def copy(self, sess):
         sess.run(self.copy_ops)
-        sess.run(qnet.reset_optimizer)
+        sess.run(self.qnet.reset_optimizer)
 
     def check(self, sess, epsilon=1e-6):
         diff = sess.run(self.check_ops)
@@ -269,7 +271,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
 def main():
     env_name = "Breakout-v0"
     env = gym.make(env_name)
-    history_size = 4
+    history_size = 2
     observation_shape = list(env.observation_space.shape)
     state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
@@ -285,7 +287,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(1e3), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=100, replay_memory_size=int(1e6), eval_every=int(5e2), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
