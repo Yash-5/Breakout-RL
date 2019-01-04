@@ -47,6 +47,7 @@ class QNet():
                 self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr, momentum=self.momentum)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
+                self.reset_optimizer = tf.variables_initializer([self.optimizer.get_slot(var, name) for name in self.optimizer.get_slot_names() for var in self.model_vars])
 
     def build_model(self):
         self.X = tf.placeholder(shape=[None] + list(self.input_shape), dtype=tf.float32, name="X")
@@ -101,6 +102,7 @@ class param_copier():
 
     def copy(self, sess):
         sess.run(self.copy_ops)
+        sess.run(qnet.reset_optimizer)
 
     def check(self, sess, epsilon=1e-6):
         diff = sess.run(self.check_ops)
