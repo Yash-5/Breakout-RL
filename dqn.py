@@ -114,10 +114,10 @@ def epsilon_greedy(qnet, sess, state, epsilon, num_actions=4):
         return np.argmax(q_values)
 
 
-def reset_env(env, s_processor, sess):
+def reset_env(env, s_processor, sess, history_size=4):
     state = env.reset()
     state = s_processor.process(sess, state)
-    state = np.stack([np.squeeze(state, axis=2)] * 4, axis=2)
+    state = np.stack([np.squeeze(state, axis=2)] * history_size, axis=2)
     return state
 
 def check_preprocessing(env, s_processor, sess):
@@ -131,11 +131,11 @@ def check_preprocessing(env, s_processor, sess):
         plt.imshow(next_state[:, :, 0], cmap='gray')
         plt.show()
 
-def evaluate(eval_episodes, sess, env_name, qnet, s_processor, epsilon=0.05):
+def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, epsilon=0.05):
     env = gym.make(env_name)
     rewards = []
     for ep in range(eval_episodes):
-        state = reset_env(env, s_processor, sess)
+        state = reset_env(env, s_processor, sess, history_size)
         episode_reward = 0
         done = False
         while not done:
@@ -149,7 +149,7 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, epsilon=0.05):
 
 def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          eval_every=100, eval_episodes=10, batch_size=32, hide_progress=False, use_double=False):
+          eval_every=100, eval_episodes=10, history_size=4, batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     with open(os.path.join(save_dir, "params"), 'w') as param_file:
@@ -185,7 +185,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
     Transition = namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
     replay_memory = []
 
-    state = reset_env(env, s_processor, sess)
+    state = reset_env(env, s_processor, sess, history_size)
     #  print(state.shape)
     #  a = sess.run([qnet.pool1, qnet.pool2, qnet.pool3], {qnet.X : np.expand_dims(state, 0)})
     #  for x in a:
@@ -198,17 +198,17 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         next_state = np.append(state[:, :, 1:], next_state, axis=2)
         replay_memory.append(Transition(state, action, reward, next_state, done))
         if done:
-            state = reset_env(env, s_processor, sess)
+            state = reset_env(env, s_processor, sess, history_size)
         else:
             state = next_state
 
-    state = reset_env(env, s_processor, sess)
+    state = reset_env(env, s_processor, sess, history_size)
     episode_reward = 0
     episode_length = 0
     train_episode = 0
     for train_iter in tqdm(range(train_iters), disable=hide_progress):
         if train_iter % eval_every == 0:
-            eval_rewards = evaluate(eval_episodes, sess, env.unwrapped.spec.id, qnet, s_processor, epsilon=epsilon_end)
+            eval_rewards = evaluate(eval_episodes, sess, env.unwrapped.spec.id, qnet, s_processor, history_size, epsilon=epsilon_end)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
             eval_writer.writerow([train_episode, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
@@ -251,14 +251,12 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         if done:
             train_writer.writerow([train_episode, episode_reward, episode_length])
             train_log.flush()
-            state = reset_env(env, s_processor, sess)
+            state = reset_env(env, s_processor, sess, history_size)
             episode_reward = 0
             episode_length = 0
             train_episode += 1
         else:
             state = next_state
-
-
 
     #  eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
     #  eval_mean = np.mean(eval_rewards)
@@ -285,7 +283,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6))
+    train(int(5e7), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=10000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
