@@ -146,7 +146,7 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
             action =  epsilon_greedy(qnet, sess, state, epsilon)
             next_state, reward, done, _ = env.step(action)
             next_state = s_processor.process(sess, next_state)
-            next_state = np.append(state[:, :, 1:], next_state, axis=2)
+            state = np.append(state[:, :, 1:], next_state, axis=2)
             episode_reward += reward
         rewards.append(episode_reward)
     return rewards
