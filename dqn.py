@@ -35,7 +35,7 @@ class QNet():
         self.trainable = trainable
         self.momentum = momentum
         if self.trainable:
-            self.lr = lr
+            self.lr = tf.placeholder(tf.float32, shape=[])
         self.history_size = input_shape[-1]
         with tf.variable_scope(scope_name):
             self.build_model()
@@ -76,10 +76,11 @@ class QNet():
     def predict(self, sess, state):
         return sess.run(self.preds, feed_dict={self.X: state})
 
-    def update(self, sess, state, actions, y):
+    def update(self, sess, state, actions, y, lr=1e-4):
         loss, _ = sess.run([self.loss, self.update_op], feed_dict={self.X: state,
                                                                    self.y: y,
-                                                                   self.actions: actions})
+                                                                   self.actions: actions,
+                                                                   self.lr: lr})
         return loss
 
 class param_copier():
