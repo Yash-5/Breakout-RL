@@ -63,7 +63,6 @@ class QNet():
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.conv3 = tf.contrib.layers.conv2d(self.conv2, 64, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        #  self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
 
         self.flattened = tf.contrib.layers.flatten(self.conv3)
         self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 512, activation_fn=tf.nn.relu,
@@ -190,23 +189,25 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
     replay_memory = []
 
     state = reset_env(env, s_processor, sess, history_size)
-    #  print(state.shape)
-    #  a = sess.run([qnet.pool1, qnet.pool2, qnet.pool3], {qnet.X : np.expand_dims(state, 0)})
-    #  for x in a:
-        #  print(x.shape)
-    #  return
+    lives = env.env.ale.lives()
     for i in tqdm(range(burn_in), disable=hide_progress):
         action = env.action_space.sample()
-        next_state, reward, done, _ = env.step(action)
+        next_state, reward, done, info = env.step(action)
         next_state = s_processor.process(sess, next_state)
         next_state = np.append(state[:, :, 1:], next_state, axis=2)
-        replay_memory.append(Transition(state, action, reward, next_state, done))
+        replay_memory.append(Transition(state, action, reward, next_state, info['ale.lives'] < lives))
+        if info['ale.lives'] < lives:
+            lives = info['ale.lives']
+            next_state = np.stack([next_state[:, :, -1]] * history_size, axis=2)
+
         if done:
             state = reset_env(env, s_processor, sess, history_size)
+            lives = env.env.ale.lives()
         else:
             state = next_state
 
     state = reset_env(env, s_processor, sess, history_size)
+    lives = env.env.ale.lives()
     episode_reward = 0
     episode_length = 0
     train_episode = 0
@@ -223,14 +224,18 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
 
         epsilon = epsilons[min(train_iter, epsilon_decay_iter-1)]
         action = epsilon_greedy(qnet, sess, state, epsilon)
-        next_state, reward, done, _ = env.step(action)
+        next_state, reward, done, info = env.step(action)
         next_state = s_processor.process(sess, next_state)
         next_state = np.append(state[:, :, 1:], next_state, axis=2)
 
         episode_reward += reward
         episode_length += 1
 
-        replay_memory.append(Transition(state, action, reward, next_state, done))
+        replay_memory.append(Transition(state, action, reward, next_state, info['ale.lives'] < lives))
+        if info['ale.lives'] < lives:
+            lives = info['ale.lives']
+            next_state = np.stack([next_state[:, :, -1]] * history_size, axis=2)
+
         if len(replay_memory) == replay_memory_size:
             replay_memory.pop(0)
 
@@ -287,7 +292,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(1e3), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=100, replay_memory_size=int(1e6), eval_every=int(5e2), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
