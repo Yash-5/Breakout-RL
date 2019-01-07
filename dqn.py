@@ -28,7 +28,7 @@ class state_processor():
         return processed_state
 
 class QNet():
-    def __init__(self, scope_name, input_shape, lr=1e-3, momentum=0.95, num_actions=4, trainable=True):
+    def __init__(self, scope_name, input_shape, momentum=0.95, num_actions=4, trainable=True):
         self.scope_name = scope_name
         self.input_shape = input_shape
         self.num_actions = num_actions
@@ -282,7 +282,7 @@ def main():
     state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
-    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=2.5e-4, momentum=0)
+    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet")
     target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", trainable=False)
 
     pc = param_copier(qnet, target_net)
