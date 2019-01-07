@@ -258,7 +258,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
 
         train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
 
-        loss = qnet.update(sess, train_states, train_actions, train_targets, learning_rate=2.5e-4)
+        loss = qnet.update(sess, train_states, train_actions, train_targets, lr=2.5e-4)
 
         loss_writer.writerow([train_iter, loss])
 
