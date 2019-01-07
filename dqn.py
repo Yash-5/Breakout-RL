@@ -258,7 +258,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
 
         train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
 
-        loss = qnet.update(sess, train_states, train_actions, train_targets, learning_rate=2.5e-4)
+        loss = qnet.update(sess, train_states, train_actions, train_targets, lr=2.5e-4)
 
         loss_writer.writerow([train_iter, loss])
 
@@ -296,7 +296,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/rclip-lives-" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/rclip-lives-" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
