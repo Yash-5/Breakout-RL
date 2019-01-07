@@ -266,6 +266,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
             train_writer.writerow([train_episode, episode_reward, episode_length])
             train_log.flush()
             state = reset_env(env, s_processor, sess, history_size)
+            episode_reward = 0
             episode_length = 0
             train_episode += 1
         else:
