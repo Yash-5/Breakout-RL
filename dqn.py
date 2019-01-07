@@ -44,7 +44,7 @@ class QNet():
 
                 self.loss = tf.losses.huber_loss(self.y, self.action_preds)
 
-                self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr, momentum=self.momentum)
+                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
                 self.reset_optimizer = tf.variables_initializer([self.optimizer.get_slot(var, name) for name in self.optimizer.get_slot_names() for var in self.model_vars])
@@ -63,7 +63,6 @@ class QNet():
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
         self.conv3 = tf.contrib.layers.conv2d(self.conv2, 64, 3, 1, activation_fn=tf.nn.relu,
                                               weights_initializer=tf.contrib.layers.variance_scaling_initializer())
-        #  self.pool3 = tf.contrib.layers.max_pool2d(self.conv3, 2, padding='SAME')
 
         self.flattened = tf.contrib.layers.flatten(self.conv3)
         self.fc1 = tf.contrib.layers.fully_connected(self.flattened, 512, activation_fn=tf.nn.relu,
@@ -104,7 +103,7 @@ class param_copier():
 
     def copy(self, sess):
         sess.run(self.copy_ops)
-        sess.run(self.qnet.reset_optimizer)
+        # sess.run(self.qnet.reset_optimizer)
 
     def check(self, sess, epsilon=1e-6):
         diff = sess.run(self.check_ops)
@@ -146,7 +145,7 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
             action =  epsilon_greedy(qnet, sess, state, epsilon)
             next_state, reward, done, _ = env.step(action)
             next_state = s_processor.process(sess, next_state)
-            next_state = np.append(state[:, :, 1:], next_state, axis=2)
+            state = np.append(state[:, :, 1:], next_state, axis=2)
             episode_reward += reward
         rewards.append(episode_reward)
     return rewards
@@ -200,7 +199,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         next_state, reward, done, _ = env.step(action)
         next_state = s_processor.process(sess, next_state)
         next_state = np.append(state[:, :, 1:], next_state, axis=2)
-        replay_memory.append(Transition(state, action, reward, next_state, done))
+        replay_memory.append(Transition(state, action, np.clip(reward, -1, 1), next_state, done))
         if done:
             state = reset_env(env, s_processor, sess, history_size)
         else:
@@ -230,7 +229,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         episode_reward += reward
         episode_length += 1
 
-        replay_memory.append(Transition(state, action, reward, next_state, done))
+        replay_memory.append(Transition(state, action, np.clip(reward, -1, 1), next_state, done))
         if len(replay_memory) == replay_memory_size:
             replay_memory.pop(0)
 
@@ -276,7 +275,7 @@ def main():
     state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
-    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=2.5e-4)
+    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=2.5e-4, momentum=0)
     target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", trainable=False)
 
     pc = param_copier(qnet, target_net)
@@ -287,7 +286,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(1e3), "./logs/" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=100, replay_memory_size=int(1e6), eval_every=int(5e2), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/rclip-" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
