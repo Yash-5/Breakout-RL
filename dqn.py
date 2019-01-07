@@ -158,7 +158,7 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
 
 def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          eval_every=100, eval_episodes=10, history_size=4, batch_size=32, hide_progress=False, use_double=False):
+          eval_every=100, eval_episodes=10, eval_epsilon=0.05, history_size=4, batch_size=32, hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
     with open(os.path.join(save_dir, "params"), 'w') as param_file:
@@ -219,7 +219,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
     train_episode = 0
     for train_iter in tqdm(range(train_iters), disable=hide_progress):
         if train_iter % eval_every == 0:
-            eval_rewards = evaluate(eval_episodes, sess, env.unwrapped.spec.id, qnet, s_processor, history_size, epsilon=epsilon_end)
+            eval_rewards = evaluate(eval_episodes, sess, env.unwrapped.spec.id, qnet, s_processor, history_size, epsilon=eval_epsilon)
             eval_mean = np.mean(eval_rewards)
             eval_std = np.std(eval_rewards)
             eval_writer.writerow([train_episode, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
