@@ -140,13 +140,18 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
     rewards = []
     for ep in range(eval_episodes):
         state = reset_env(env, s_processor, sess, history_size)
+        lives = env.env.ale.lives()
         episode_reward = 0
         done = False
         while not done:
             action =  epsilon_greedy(qnet, sess, state, epsilon)
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done, info = env.step(action)
             next_state = s_processor.process(sess, next_state)
-            state = np.append(state[:, :, 1:], next_state, axis=2)
+            if info['ale.lives'] < lives:
+                lives = info['ale.lives']
+                state = np.stack([next_state[:, :, -1]] * history_size, axis=2)
+            else:
+                state = np.append(state[:, :, 1:], next_state, axis=2)
             episode_reward += reward
         rewards.append(episode_reward)
     return rewards
