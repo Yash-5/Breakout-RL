@@ -18,7 +18,6 @@ class state_processor():
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
             self.output = tf.image.rgb_to_grayscale(self.input_state)
-            self.output = tf.image.crop_to_bounding_box(self.output, 34, 0, 160, 160)
             if output_shape is not None:
                 self.output = tf.image.resize_images(self.output, output_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
             self.output = tf.dtypes.cast(self.output, tf.uint8)
@@ -34,18 +33,18 @@ class QNet():
         self.num_actions = num_actions
         self.trainable = trainable
         self.momentum = momentum
-        if self.trainable:
-            self.lr = tf.placeholder(tf.float32, shape=[])
         self.history_size = input_shape[-1]
         with tf.variable_scope(scope_name):
             self.build_model()
         if self.trainable:
             with tf.variable_scope("optim" + scope_name):
+                self.lr = tf.placeholder(tf.float32, shape=[])
 
                 self.loss = tf.losses.huber_loss(self.y, self.action_preds)
 
-                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
+                self.saver = tf.train.Saver(self.model_vars)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
                 self.reset_optimizer = tf.variables_initializer([self.optimizer.get_slot(var, name) for name in self.optimizer.get_slot_names() for var in self.model_vars])
 
@@ -82,6 +81,9 @@ class QNet():
                                                                    self.actions: actions,
                                                                    self.lr: lr})
         return loss
+
+    def save_model(self, sess, path="./models", global_step=0):
+        self.saver.save(sess, path, global_step)
 
 class param_copier():
     def __init__(self, qnet, target_net):
@@ -158,9 +160,13 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
 
 def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          eval_every=100, eval_episodes=10, eval_epsilon=0.05, history_size=4, batch_size=32, hide_progress=False, use_double=False):
+          eval_every=100, eval_episodes=10, eval_epsilon=0.05, model_prefix="dqn", history_size=4, batch_size=32,
+          hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
+    model_dir = os.path.join(save_dir, "models/")
+    if not os.path.isdir(model_dir):
+        os.makedirs(model_dir)
     with open(os.path.join(save_dir, "params"), 'w') as param_file:
         layers = [x for x in dir(qnet) if x.startswith("conv") or x.startswith("fc") or x.startswith("preds")]
         for v in layers:
@@ -223,6 +229,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
             eval_std = np.std(eval_rewards)
             eval_writer.writerow([train_episode, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
             eval_log.flush()
+            qnet.save_model(sess, model_dir + model_prefix, train_iter)
 
         if train_iter % target_update_iter == 0:
             p_copier.copy(sess)
@@ -279,7 +286,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
     #  eval_log.flush()
 
 def main():
-    env_name = "Breakout-v0"
+    env_name = "BreakoutDeterministic-v4"
     env = gym.make(env_name)
     history_size = 4
     observation_shape = list(env.observation_space.shape)
@@ -294,10 +301,11 @@ def main():
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
 
+    model_prefix = "dqn"
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/rclip-lives-" + start_time, sess, env, qnet, target_net, sp, pc, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
