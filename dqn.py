@@ -184,6 +184,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         param_file.write("epsilon decay " + str(epsilon_decay_iter) + "\n")
         param_file.write("eval every " + str(eval_every) + "\n")
         param_file.write("eval episodes " + str(eval_episodes) + "\n")
+        param_file.write("eval epsilon " + str(eval_epsilon) + "\n")
         param_file.write("ddqn? " + str(use_double) + "\n")
     loss_log = open(os.path.join(save_dir, "loss.csv"), 'w')
     loss_writer = csv.writer(loss_log, delimiter=',')
