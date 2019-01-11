@@ -18,6 +18,7 @@ class state_processor():
         with tf.variable_scope(self.scope_name):
             self.input_state = tf.placeholder(shape=input_shape, dtype=tf.float32)
             self.output = tf.image.rgb_to_grayscale(self.input_state)
+            self.output = tf.image.crop_to_bounding_box(self.output, 34, 0, 160, 160)
             if output_shape is not None:
                 self.output = tf.image.resize_images(self.output, output_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
             self.output = tf.dtypes.cast(self.output, tf.uint8)
@@ -27,22 +28,22 @@ class state_processor():
         return processed_state
 
 class QNet():
-    def __init__(self, scope_name, input_shape, momentum=0.95, num_actions=4, trainable=True):
+    def __init__(self, scope_name, input_shape, lr=1e-4, decay=0.9, momentum=0, num_actions=4, trainable=True):
         self.scope_name = scope_name
         self.input_shape = input_shape
         self.num_actions = num_actions
         self.trainable = trainable
         self.momentum = momentum
+        self.lr = lr
+        self.decay = decay
         self.history_size = input_shape[-1]
         with tf.variable_scope(scope_name):
             self.build_model()
         if self.trainable:
             with tf.variable_scope("optim" + scope_name):
-                self.lr = tf.placeholder(tf.float32, shape=[])
-
                 self.loss = tf.losses.huber_loss(self.y, self.action_preds)
 
-                self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+                self.optimizer = tf.train.RMSPropOptimizer(self.lr, self.decay, self.momentum)
                 self.model_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope_name)
                 self.saver = tf.train.Saver(self.model_vars)
                 self.update_op = self.optimizer.minimize(self.loss, var_list=self.model_vars)
@@ -75,15 +76,17 @@ class QNet():
     def predict(self, sess, state):
         return sess.run(self.preds, feed_dict={self.X: state})
 
-    def update(self, sess, state, actions, y, lr=1e-4):
+    def update(self, sess, state, actions, y):
         loss, _ = sess.run([self.loss, self.update_op], feed_dict={self.X: state,
                                                                    self.y: y,
-                                                                   self.actions: actions,
-                                                                   self.lr: lr})
+                                                                   self.actions: actions})
         return loss
 
     def save_model(self, sess, path="./models", global_step=0):
         self.saver.save(sess, path, global_step)
+
+    def load_model(self, sess, path):
+        self.saver.restore(sess, path)
 
 class param_copier():
     def __init__(self, qnet, target_net):
@@ -106,7 +109,6 @@ class param_copier():
 
     def copy(self, sess):
         sess.run(self.copy_ops)
-        # sess.run(self.qnet.reset_optimizer)
 
     def check(self, sess, epsilon=1e-6):
         diff = sess.run(self.check_ops)
@@ -265,7 +267,7 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
 
         train_targets = train_rewards + (1 - train_done.astype(np.float32)) * gamma * target_values_next
 
-        loss = qnet.update(sess, train_states, train_actions, train_targets, lr=2.5e-4)
+        loss = qnet.update(sess, train_states, train_actions, train_targets)
 
         loss_writer.writerow([train_iter, loss])
 
@@ -279,12 +281,6 @@ def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_cop
         else:
             state = next_state
 
-    #  eval_rewards = evaluate(eval_episodes, sess, env, qnet, s_processor, epsilon=epsilon_end)
-    #  eval_mean = np.mean(eval_rewards)
-    #  eval_std = np.std(eval_rewards)
-    #  eval_writer.writerow([train_ep, eval_mean, eval_std, min(eval_rewards), max(eval_rewards)])
-    #  eval_log.flush()
-
 def main():
     env_name = "BreakoutDeterministic-v4"
     env = gym.make(env_name)
@@ -293,7 +289,7 @@ def main():
     state_shape = [84, 84]
     sp = state_processor(input_shape=observation_shape, output_shape=state_shape)
 
-    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet")
+    qnet = QNet(input_shape=state_shape + [history_size], scope_name="QNet", lr=2.5e-4)
     target_net = QNet(input_shape=state_shape + [history_size], scope_name="Target", trainable=False)
 
     pc = param_copier(qnet, target_net)
@@ -305,7 +301,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=True, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
