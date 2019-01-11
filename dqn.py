@@ -162,7 +162,7 @@ def evaluate(eval_episodes, sess, env_name, qnet, s_processor, history_size, eps
 
 def train(train_iters, save_dir, sess, env, qnet, target_net, s_processor, p_copier, replay_memory_size=50000, burn_in=10000,
           target_update_iter=10, gamma=0.99, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay_iter=500000,
-          eval_every=100, eval_episodes=10, eval_epsilon=0.05, model_prefix="dqn", history_size=4, batch_size=32,
+          eval_every=100, eval_episodes=100, eval_epsilon=0.05, model_prefix="dqn", history_size=4, batch_size=32,
           hide_progress=False, use_double=False):
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
@@ -301,7 +301,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, eval_episodes=100, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
