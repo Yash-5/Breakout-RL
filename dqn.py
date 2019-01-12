@@ -302,7 +302,7 @@ def main():
     start_time = str(datetime.now())
     print(start_time)
 
-    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, eval_episodes=100, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
+    train(int(5e7), "./logs/" + model_prefix + "-" + start_time, sess, env, qnet, target_net, sp, pc, model_prefix=model_prefix, eval_episodes=100, hide_progress=False, target_update_iter=10000, burn_in=50000, replay_memory_size=int(1e6), eval_every=int(1e6), eval_epsilon=0.01, use_double=False, epsilon_start=1.0, epsilon_end=0.1, epsilon_decay_iter=int(1e6), history_size=history_size)
     
 if __name__ == '__main__':
     main()
