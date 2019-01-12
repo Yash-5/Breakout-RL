@@ -1,0 +1,17 @@
+Tensor("QNet/Conv/Relu:0", shape=(?, 21, 21, 32), dtype=float32)
+Tensor("QNet/Conv_1/Relu:0", shape=(?, 11, 11, 64), dtype=float32)
+Tensor("QNet/Conv_2/Relu:0", shape=(?, 11, 11, 64), dtype=float32)
+Tensor("QNet/fully_connected/Relu:0", shape=(?, 512), dtype=float32)
+Tensor("QNet/fully_connected_1/BiasAdd:0", shape=(?, 4), dtype=float32)
+input shape 84 84
+memory size 1000000
+burn in 50000
+target update 10000
+gamma 0.99
+epsilon start 1.0
+epsilon end 0.1
+epsilon decay 1000000
+eval every 1000000
+eval episodes 100
+eval epsilon 0.05
+ddqn? False
